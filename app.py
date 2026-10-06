@@ -37,7 +37,7 @@ def create_app(config_object=None) -> Flask:
     configure_logging(app)
     if app.config.get("UPLOAD_STORAGE_BACKEND") != "filesystem":
         raise RuntimeError("Unsupported upload storage backend.")
-    ensure_storage_ready(writable_probe=app.config["APP_ENV"] == "production" and not app.config.get("TESTING"))
+    ensure_storage_ready(app, writable_probe=app.config["APP_ENV"] == "production" and not app.config.get("TESTING"))
 
     db.init_app(app)
     csrf.init_app(app)

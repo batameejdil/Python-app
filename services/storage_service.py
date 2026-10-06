@@ -16,14 +16,15 @@ _IMAGE_OPEN_FORMATS = tuple(_IMAGE_FORMATS)
 _MANAGED_PATH_RE = re.compile(r"^uploads/(profiles|businesses|portfolio)/[a-f0-9]{32,40}\.(jpg|png|webp)$")
 
 
-def upload_storage_root() -> Path:
-    configured = str(current_app.config.get("UPLOAD_STORAGE_ROOT") or "").strip()
-    root = Path(configured) if configured else Path(current_app.root_path) / "uploads"
+def upload_storage_root(app=None) -> Path:
+    target_app = app or current_app
+    configured = str(target_app.config.get("UPLOAD_STORAGE_ROOT") or "").strip()
+    root = Path(configured) if configured else Path(target_app.root_path) / "uploads"
     return root.expanduser().resolve()
 
 
-def ensure_storage_ready(*, writable_probe: bool = False) -> Path:
-    root = upload_storage_root()
+def ensure_storage_ready(app=None, *, writable_probe: bool = False) -> Path:
+    root = upload_storage_root(app)
     root.mkdir(parents=True, exist_ok=True, mode=0o750)
     for folder in sorted(_ALLOWED_FOLDERS):
         (root / folder).mkdir(parents=True, exist_ok=True, mode=0o750)
