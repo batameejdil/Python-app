@@ -154,3 +154,4 @@ Razorpay checkout uses server-side order creation, immutable checkout snapshots,
 - Render's normal filesystem is ephemeral; permanent user uploads must remain on the attached persistent disk or be migrated to object storage in a future architecture.
 - A Render persistent disk is single-instance storage, so horizontal multi-instance scaling requires moving uploads to shared object storage first.
 - Historical `PRODUCTION_PHASE*.md` and PHP hardening artifacts are retained as migration evidence; `docs/DEPLOYMENT.md` is the current deployment source of truth.
+
