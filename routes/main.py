@@ -36,25 +36,40 @@ def uploaded_file(filename: str):
 @bp.get("/")
 @bp.get("/index.php")
 def index():
-    categories = db.session.scalars(select(Category).where(Category.is_active == 1).order_by(Category.id).limit(12)).all()
-    avg_rating = func.coalesce(func.avg(Review.rating), 0).label("avg_rating")
-    review_count = func.count(func.distinct(Review.id)).label("review_count")
-    featured = db.session.execute(
-        select(User.id, User.name, User.profile_image, User.city, User.area, ProviderProfile.headline,
-               ProviderProfile.price_min, ProviderProfile.price_max, ProviderProfile.verification_status,
-               avg_rating, review_count)
-        .join(ProviderProfile, ProviderProfile.user_id == User.id)
-        .outerjoin(Review, (Review.target_user_id == User.id) & (Review.status == "published"))
-        .where(User.status == "active", User.role == "provider", ProviderProfile.is_featured == 1)
-        .group_by(User.id, ProviderProfile.id).order_by(avg_rating.desc(), ProviderProfile.updated_at.desc()).limit(6)
-    ).mappings().all()
-    businesses = db.session.execute(
-        select(User.id, User.name, User.city, User.area, BusinessProfile.business_name, BusinessProfile.logo,
-               BusinessProfile.description, BusinessProfile.verification_status)
-        .join(BusinessProfile, BusinessProfile.user_id == User.id)
-        .where(User.status == "active", User.role == "business")
-        .order_by(BusinessProfile.is_featured.desc(), BusinessProfile.updated_at.desc()).limit(6)
-    ).mappings().all()
+    try:
+        categories = db.session.scalars(select(Category).where(Category.is_active == 1).order_by(Category.id).limit(12)).all()
+    except Exception:
+        db.session.rollback()
+        categories = []
+
+    try:
+        avg_rating = func.coalesce(func.avg(Review.rating), 0).label("avg_rating")
+        review_count = func.count(func.distinct(Review.id)).label("review_count")
+        featured = db.session.execute(
+            select(User.id, User.name, User.profile_image, User.city, User.area, ProviderProfile.headline,
+                   ProviderProfile.price_min, ProviderProfile.price_max, ProviderProfile.verification_status,
+                   avg_rating, review_count)
+            .join(ProviderProfile, ProviderProfile.user_id == User.id)
+            .outerjoin(Review, (Review.target_user_id == User.id) & (Review.status == "published"))
+            .where(User.status == "active", User.role == "provider", ProviderProfile.is_featured == 1)
+            .group_by(User.id, ProviderProfile.id).order_by(avg_rating.desc(), ProviderProfile.updated_at.desc()).limit(6)
+        ).mappings().all()
+    except Exception:
+        db.session.rollback()
+        featured = []
+
+    try:
+        businesses = db.session.execute(
+            select(User.id, User.name, User.city, User.area, BusinessProfile.business_name, BusinessProfile.logo,
+                   BusinessProfile.description, BusinessProfile.verification_status)
+            .join(BusinessProfile, BusinessProfile.user_id == User.id)
+            .where(User.status == "active", User.role == "business")
+            .order_by(BusinessProfile.is_featured.desc(), BusinessProfile.updated_at.desc()).limit(6)
+        ).mappings().all()
+    except Exception:
+        db.session.rollback()
+        businesses = []
+
     return render_template("main/index.html", page_title="LocalConnect — Find Trusted Local Services Near You", categories=categories, featured=featured, businesses=businesses)
 
 

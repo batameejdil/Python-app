@@ -50,6 +50,26 @@ def create_app(config_object=None) -> Flask:
 
     register_error_handlers(app)
 
+    with app.app_context():
+        try:
+            db.create_all()
+            from models.core import Category
+            from sqlalchemy import select
+            if not db.session.scalars(select(Category).limit(1)).first():
+                default_categories = [
+                    Category(name="Electrician", slug="electrician", icon="fas fa-bolt", description="Electrical repairs and wiring"),
+                    Category(name="Plumber", slug="plumber", icon="fas fa-wrench", description="Plumbing and pipe fitting"),
+                    Category(name="Cleaning", slug="cleaning", icon="fas fa-broom", description="Home and office cleaning"),
+                    Category(name="Carpenter", slug="carpenter", icon="fas fa-hammer", description="Woodwork and furniture repairs"),
+                    Category(name="Painter", slug="painter", icon="fas fa-paint-roller", description="Home painting and whitewash"),
+                    Category(name="AC Repair", slug="ac-repair", icon="fas fa-fan", description="AC servicing and installation"),
+                ]
+                db.session.add_all(default_categories)
+                db.session.commit()
+        except Exception:
+            app.logger.warning("Database auto-init skipped or encountered error")
+            db.session.rollback()
+
     def lc_url(path: str = "") -> str:
         base = app.config.get("APP_BASE_PATH", "/") or "/"
         if base == "/":
