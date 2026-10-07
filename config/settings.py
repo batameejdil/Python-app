@@ -242,8 +242,9 @@ class BaseConfig:
         "write_timeout": env_int("DB_WRITE_TIMEOUT", 30, minimum=1, maximum=300),
     }
     _db_uri_str = SQLALCHEMY_DATABASE_URI.lower() if SQLALCHEMY_DATABASE_URI else ""
-    if env_bool("DB_SSL", "tidbcloud.com" in _db_uri_str or "aivencloud.com" in _db_uri_str):
-        _db_connect_args["ssl"] = {}
+    if env_bool("DB_SSL", "tidbcloud.com" in _db_uri_str or "aivencloud.com" in _db_uri_str or "ssl" in _db_uri_str):
+        import ssl
+        _db_connect_args["ssl"] = ssl.create_default_context()
     SQLALCHEMY_ENGINE_OPTIONS: dict[str, Any] = {
         "pool_pre_ping": True,
         "pool_recycle": env_int("DB_POOL_RECYCLE", 280, minimum=30, maximum=3600),

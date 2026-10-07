@@ -123,6 +123,7 @@ def connect(*, migration: bool = False):
         write_timeout=settings.write_timeout,
         cursorclass=pymysql.cursors.DictCursor,
     )
-    if settings.ssl_enabled:
-        kwargs["ssl"] = {}
+    if settings.ssl_enabled or "tidbcloud.com" in settings.host:
+        import ssl
+        kwargs["ssl"] = ssl.create_default_context()
     return pymysql.connect(**kwargs)
