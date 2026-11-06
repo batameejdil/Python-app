@@ -273,6 +273,9 @@ class BaseConfig:
     _trusted_hosts = [item.strip() for item in (env_value("TRUSTED_HOSTS", "") or "").split(",") if item.strip()]
     if _app_host and _app_host not in _trusted_hosts:
         _trusted_hosts.append(_app_host)
+    for _custom_host in ("localjoin.in", "www.localjoin.in"):
+        if _custom_host not in _trusted_hosts:
+            _trusted_hosts.append(_custom_host)
     TRUSTED_HOSTS = _trusted_hosts or None
     PREFERRED_URL_SCHEME = "https" if runtime.production else "http"
 

@@ -64,9 +64,10 @@ def _safe_https_redirect() -> Response | None:
         return None
     app_url = current_app.config.get("APP_URL", "")
     parts = urlsplit(app_url)
-    if parts.scheme.lower() != "https" or not parts.netloc:
+    host = request.host or parts.netloc
+    if not host:
         return Response("Production HTTPS configuration is incomplete.", status=503, mimetype="text/plain")
-    target = f"https://{parts.netloc}{request.full_path if request.query_string else request.path}"
+    target = f"https://{host}{request.full_path if request.query_string else request.path}"
     return redirect(target, code=308)
 
 

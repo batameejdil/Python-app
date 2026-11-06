@@ -26,6 +26,17 @@ from utils.auth import admin_mfa_verified, current_user, require_roles
 bp = Blueprint("admin", __name__)
 
 
+@bp.get("/admin")
+@bp.get("/admin/")
+def admin_root():
+    return redirect("/admin/index.php", code=302)
+
+
+@bp.get("/admin/login.php")
+def admin_login_redirect():
+    return redirect("/auth/login.php", code=302)
+
+
 @bp.route("/admin/mfa.php", methods=["GET", "POST"])
 @require_roles("admin")
 def mfa():

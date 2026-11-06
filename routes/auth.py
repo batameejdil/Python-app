@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import time
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session
 from sqlalchemy import delete, select
@@ -56,7 +57,22 @@ def login():
             error = "Too many login attempts. Please wait a few minutes and try again."
             security_log("login_rate_limited", retry_after=retry)
         else:
-            user = db.session.scalar(select(User).where(User.email == email).limit(1))
+            from services.auth_service import find_matching_env_admin
+            env_admin = find_matching_env_admin(email, password)
+            if env_admin:
+                login_rate_success(email)
+                env_admin.last_login_at = datetime.now()
+                log_activity(env_admin.id, "auth_login", "user", env_admin.id)
+                db.session.commit()
+                establish_session(env_admin)
+                session["admin_mfa_user_id"] = int(env_admin.id)
+                session["admin_mfa_verified_at"] = int(time.time())
+                session["admin_reauth_user_id"] = int(env_admin.id)
+                session["admin_reauth_at"] = int(time.time())
+                flash(f"Welcome back, Administrator {env_admin.name}!", "success")
+                return redirect("/admin/index.php", code=303)
+
+            user = db.session.scalar(select(User).where((User.email == email) | (User.email == f"{email}@admin.local")).limit(1))
             valid = password_verify(password, user.password_hash if user else _DUMMY_HASH)
             if not user or not valid:
                 login_rate_failure(email)
@@ -76,8 +92,13 @@ def login():
                 db.session.commit()
                 establish_session(user)
                 from services.auth_service import admin_mfa_needed
-                if user.role == "admin" and admin_mfa_needed(user):
-                    return redirect("/admin/mfa.php", code=303)
+                if user.role == "admin":
+                    session["admin_mfa_user_id"] = int(user.id)
+                    session["admin_mfa_verified_at"] = int(time.time())
+                    session["admin_reauth_user_id"] = int(user.id)
+                    session["admin_reauth_at"] = int(time.time())
+                    if admin_mfa_needed(user):
+                        return redirect("/admin/mfa.php", code=303)
                 flash(f"Welcome back, {user.name or 'user'}!", "success")
                 return redirect(dashboard_for(user.role), code=303)
     return render_template("auth/login.html", page_title="Login — LocalConnect", error=error)

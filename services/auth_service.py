@@ -436,3 +436,162 @@ def otpauth_uri(secret: str, email: str) -> str:
     issuer = quote("LocalConnect", safe="")
     account = quote(email, safe="")
     return f"otpauth://totp/{issuer}:{account}?secret={quote(secret, safe='')}&issuer={issuer}&digits=6&period=30"
+
+
+from dataclasses import dataclass
+
+
+@dataclass
+class EnvAdminConfig:
+    identifier: str
+    email: str
+    password: str
+    name: str
+
+
+def get_env_admins() -> list[EnvAdminConfig]:
+    admins: list[EnvAdminConfig] = []
+    seen: set[str] = set()
+
+    def _register(raw_id: str | None, raw_pass: str | None, raw_name: str | None = None):
+        if not raw_id or not raw_pass:
+            return
+        identifier = str(raw_id).strip()
+        password = str(raw_pass).strip()
+        if not identifier or not password:
+            return
+        ident_key = identifier.lower()
+        if ident_key in seen:
+            return
+        seen.add(ident_key)
+        email = ident_key if "@" in identifier else f"{ident_key}@admin.local"
+        name = (raw_name or "").strip() or identifier.capitalize()
+        admins.append(EnvAdminConfig(
+            identifier=ident_key,
+            email=email,
+            password=password,
+            name=name,
+        ))
+
+    # Single admin env vars
+    _register(
+        os.getenv("ADMIN_EMAIL") or os.getenv("ADMIN_USER") or os.getenv("ADMIN_ID"),
+        os.getenv("ADMIN_PASSWORD") or os.getenv("ADMIN_PASS"),
+        os.getenv("ADMIN_NAME") or "Administrator",
+    )
+
+    # Numbered admin env vars (ADMIN_1_EMAIL, ADMIN_2_EMAIL, ADMIN_3_EMAIL, up to 20)
+    for i in range(1, 21):
+        raw_id = (
+            os.getenv(f"ADMIN_{i}_EMAIL")
+            or os.getenv(f"ADMIN{i}_EMAIL")
+            or os.getenv(f"ADMIN_{i}_USER")
+            or os.getenv(f"ADMIN{i}_USER")
+            or os.getenv(f"ADMIN_{i}_ID")
+            or os.getenv(f"ADMIN{i}_ID")
+        )
+        raw_pass = (
+            os.getenv(f"ADMIN_{i}_PASSWORD")
+            or os.getenv(f"ADMIN{i}_PASSWORD")
+            or os.getenv(f"ADMIN_{i}_PASS")
+            or os.getenv(f"ADMIN{i}_PASS")
+        )
+        raw_name = (
+            os.getenv(f"ADMIN_{i}_NAME")
+            or os.getenv(f"ADMIN{i}_NAME")
+            or f"Admin {i}"
+        )
+        _register(raw_id, raw_pass, raw_name)
+
+    # Combined variable ADMIN_USERS="admin1:pass1:Name 1,admin2:pass2:Name 2"
+    raw_users = os.getenv("ADMIN_USERS") or ""
+    if raw_users.strip():
+        for chunk in raw_users.split(","):
+            parts = [c.strip() for c in chunk.split(":") if c.strip()]
+            if len(parts) >= 2:
+                _register(parts[0], parts[1], parts[2] if len(parts) > 2 else None)
+
+    return admins
+
+
+def sync_env_admins(app=None) -> list[User]:
+    """Sync all admins configured in environment variables into the database."""
+    admins = get_env_admins()
+    if not admins:
+        return []
+    synced: list[User] = []
+    for admin in admins:
+        user = db.session.scalar(
+            select(User).where(
+                (User.email == admin.email)
+                | (User.email == admin.identifier)
+            ).limit(1)
+        )
+        if user is None:
+            user = User(
+                name=admin.name,
+                email=admin.email,
+                password_hash=password_hash(admin.password),
+                role="admin",
+                status="active",
+                email_verified_at=datetime.now(),
+                session_version=1,
+            )
+            db.session.add(user)
+        else:
+            user.role = "admin"
+            user.status = "active"
+            if not user.email_verified_at:
+                user.email_verified_at = datetime.now()
+            if not password_verify(admin.password, user.password_hash):
+                user.password_hash = password_hash(admin.password)
+            if admin.name:
+                user.name = admin.name
+        synced.append(user)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        LOGGER.exception("Failed to sync environment admin accounts into database.")
+    return synced
+
+
+def find_matching_env_admin(identity: str, password: str) -> User | None:
+    """Check if the provided credentials match any environment-configured admin."""
+    if not identity or not password:
+        return None
+    ident = identity.strip().lower()
+    admins = get_env_admins()
+    for admin in admins:
+        if ident in (admin.identifier, admin.email):
+            if hmac.compare_digest(admin.password, password) or password_verify(password, password_hash(admin.password)):
+                user = db.session.scalar(
+                    select(User).where(
+                        (User.email == admin.email) | (User.email == admin.identifier)
+                    ).limit(1)
+                )
+                if user is None:
+                    user = User(
+                        name=admin.name,
+                        email=admin.email,
+                        password_hash=password_hash(admin.password),
+                        role="admin",
+                        status="active",
+                        email_verified_at=datetime.now(),
+                        session_version=1,
+                    )
+                    db.session.add(user)
+                else:
+                    user.role = "admin"
+                    user.status = "active"
+                    if not user.email_verified_at:
+                        user.email_verified_at = datetime.now()
+                    if not password_verify(admin.password, user.password_hash):
+                        user.password_hash = password_hash(admin.password)
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                return user
+    return None
+

@@ -66,6 +66,9 @@ def create_app(config_object=None) -> Flask:
                 ]
                 db.session.add_all(default_categories)
                 db.session.commit()
+
+            from services.auth_service import sync_env_admins
+            sync_env_admins(app)
         except Exception:
             app.logger.warning("Database auto-init skipped or encountered error")
             db.session.rollback()
